@@ -1,0 +1,196 @@
+-- Services
+local Service = setmetatable({}, {__index = function(Self, Index)
+    return game.GetService(game, Index);
+end})
+
+local Players = Service.Players
+local Workspace = Service.Workspace
+
+-- Imports
+local BetterDrawing = loadstring(game:HttpGet("https://raw.githubusercontent.com/dementiaenjoyer/Better-Drawing/refs/heads/main/Main.lua"))()
+
+-- Cache
+local Black = Color3.new(0, 0, 0)
+local DrawingNew = Drawing.new
+local Vector3New, Vector2New = Vector3.new, Vector2.new
+local CFrameNew = CFrame.new
+local Round, Tan, Rad, Floor, Max, Min = math.round, math.tan, math.rad, math.floor, math.max, math.min
+
+-- Variables
+local DrawingFlag = BetterDrawing.FLAG
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- ⚙️ CONFIGURAÇÕES DE ATIVAÇÃO
+local Settings = {
+    Enabled = true,        -- ESP geral
+    Boxes = true,          -- mostrar caixas
+    Names = true,          -- mostrar nome
+    HealthBar = true,      -- mostrar barra de vida
+    TeamCheck = false,     -- ignorar aliados
+    BoxColor = Color3.new(1, 1, 1),
+    NameColor = Color3.new(1, 1, 1),
+    HealthColor = Color3.new(0, 1, 0),
+}
+
+-- Functions
+local Utility = {}
+function Utility:ReverseKeys(Old, Hello)
+    local Table = {}
+    for Index, Value in Old do
+        if (typeof(Index) == "number") and Hello then
+            Value, Index = Value.Name, Value
+        end
+        Table[Value] = Index
+    end
+    return Table
+end
+
+-- Main
+do
+    local Library = { Connections = {} }
+    do
+        local PlayerManager = {}
+        do
+            local PlayerObject = {}
+            do
+                function PlayerObject:GetName()
+                    return tostring(self.Player)
+                end
+
+                function PlayerObject:GetHealth(Character)
+                    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+                    if not Humanoid then
+                        return 100, 100
+                    end
+                    return Humanoid.Health, Humanoid.MaxHealth
+                end
+                
+                function PlayerObject:GetCharacter()
+                    local Player = self.Player
+                    local Character = Player.Character
+                    if not Character then return end
+                    return Utility:ReverseKeys(Character:GetChildren(), true), Character:FindFirstChild("HumanoidRootPart")
+                end
+
+                function PlayerObject:Update()
+                    if not Settings.Enabled then return end
+                    local Character, Root = self:GetCharacter()
+                    if not Root then return end
+                    if Settings.TeamCheck and self.Player.Team == LocalPlayer.Team then return end
+
+                    local Name = self:GetName()
+                    local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Root.Position - Vector3New(0, 0.5, 0))
+                    if not OnScreen then return end
+
+                    local Dist = ScreenPos.Z
+                    local Scale = (2 * Camera.ViewportSize.Y) / ((2 * Dist * Tan(Rad(Camera.FieldOfView) / 2)) * 1.5)
+                    local Width, Height = Round(3 * Scale), Round(4 * Scale)
+                    local Size = Vector2New(Width, Height)
+                    local Center = Vector2New(Round(ScreenPos.X - (Width / 2)), Round(ScreenPos.Y - (Height / 2)))
+
+                    -- 📦 BOX
+                    if Settings.Boxes then
+                        local Outline = DrawingNew("Square", DrawingFlag)
+                        Outline.Visible = true
+                        Outline.Transparency = 1
+                        Outline.Color = Black
+                        Outline.Thickness = 3
+                        Outline.Size = Size
+                        Outline.Position = Center
+
+                        local Square = DrawingNew("Square", DrawingFlag)
+                        Square.Visible = true
+                        Square.Transparency = 1
+                        Square.Color = Settings.BoxColor
+                        Square.Thickness = 1
+                        Square.Size = Size
+                        Square.Position = Center
+                    end
+
+                    -- 🧍 NAME
+                    if Settings.Names then
+                        local Text = DrawingNew("Text", DrawingFlag)
+                        Text.Visible = true
+                        Text.Transparency = 1
+                        Text.Color = Settings.NameColor
+                        Text.Font = 2
+                        Text.Size = 13
+                        Text.Outline = true
+                        Text.OutlineColor = Black
+                        Text.Center = true
+                        Text.Text = Name
+                        Text.Position = Vector2New(Center.X + (Width / 2), Center.Y - 17)
+                    end
+
+                    -- ❤️ HEALTHBAR
+                    if Settings.HealthBar then
+                        local X, Y = Center.X - 4, Center.Y
+                        local Outline = DrawingNew("Line", DrawingFlag)
+                        local Bar = DrawingNew("Line", DrawingFlag)
+                        Outline.Transparency, Bar.Transparency = 1, 1
+                        Outline.Visible, Bar.Visible = true, true
+
+                        local Top = Floor(Y + 0.5)
+                        local Bottom = Floor(Y + Height + 0.5)
+                        local Health, MaxHealth = self:GetHealth(Character)
+
+                        Bar.Color = Settings.HealthColor
+                        Bar.Thickness = 1
+                        Bar.From = Vector2New(X, Bottom)
+                        Bar.To = Vector2New(X, Bottom - Floor(Max(0, Min(1, Health / MaxHealth)) * (Bottom - Top) + 0.5))
+
+                        Outline.Color = Black
+                        Outline.Thickness = 3
+                        Outline.From = Vector2New(X, Bottom + 1)
+                        Outline.To = Vector2New(X, Top - 1)
+                    end
+                end
+
+                PlayerObject = setmetatable(PlayerObject, {
+                    __call = function(Self, Player)
+                        local Obj = table.clone(Self)
+                        Obj.Player = Player
+                        return Obj
+                    end
+                })
+            end
+
+            function PlayerManager:Get()
+                local Objects = {}
+                for _, Player in Players:GetPlayers() do
+                    if Player ~= LocalPlayer then
+                        table.insert(Objects, PlayerObject(Player))
+                    end
+                end
+                return Objects
+            end
+
+            PlayerManager.PlayerObject = PlayerObject
+        end
+
+        function Library:Update()
+            for _, Player in self.Players:Get() do
+                Player:Update()
+            end
+        end
+
+        function Library:Initiate()
+            table.insert(self.Connections, BetterDrawing:Init(function()
+                Library:Update()
+            end))
+        end
+
+        function Library:Destroy()
+            for _, Conn in self.Connections do
+                Conn:Disconnect()
+            end
+        end
+
+        Library.Players = PlayerManager
+    end
+
+    -- para ativar manualmente:
+    -- Library:Initiate()
+    return { Library = Library, Settings = Settings }
+end
