@@ -1,0 +1,226 @@
+-- Services
+local Service = setmetatable({}, {
+    __index = function(_, Index)
+        return game:GetService(Index)
+    end
+})
+
+local Players = Service.Players
+local Workspace = Service.Workspace
+
+-- Imports
+local BetterDrawing = loadstring(game:HttpGet("https://raw.githubusercontent.com/dementiaenjoyer/Better-Drawing/refs/heads/main/Main.lua"))()
+
+-- Variables
+local DrawingFlag = BetterDrawing.FLAG
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+local DrawingNew = Drawing.new
+local Vector2New = Vector2.new
+local Vector3New = Vector3.new
+local CFrameNew = CFrame.new
+local Round, Tan, Rad, Floor, Max, Min = math.round, math.tan, math.rad, math.floor, math.max, math.min
+
+local Options = {
+    Enabled = true,
+
+    Box = {
+        Enabled = true,
+        Color = Color3.new(1, 1, 1),
+        OutlineColor = Color3.new(0, 0, 0),
+        Thickness = 1,
+        OutlineThickness = 3
+    },
+    
+    Name = {
+        Enabled = true,
+        Color = Color3.new(1, 1, 1),
+        OutlineColor = Color3.new(0, 0, 0)
+    },
+
+    Health = {
+        Enabled = true,
+        Color = Color3.new(0, 1, 0),
+        OutlineColor = Color3.new(0, 0, 0),
+        Thickness = 2,
+        OutlineThickness = 3
+    }
+}
+
+local Utility = {}
+
+function Utility:ReverseKeys(Old, Hello)
+    local Table = {}
+    for Index, Value in Old do
+        if typeof(Index) == "number" and Hello then
+            Value, Index = Value.Name, Value
+        end
+        Table[Value] = Index
+    end
+    return Table
+end
+
+-- Main Library
+local Library = { Connections = {}, PlayerCache = {} }
+
+-- Player Object
+local PlayerObject = {}
+PlayerObject.__index = PlayerObject
+
+function PlayerObject.new(Player)
+    local self = setmetatable({}, PlayerObject)
+    self.Player = Player
+
+    self.BoxOutline = DrawingNew("Square", DrawingFlag)
+    self.BoxOutline.Filled = false
+    self.BoxOutline.Visible = false
+
+    self.Box = DrawingNew("Square", DrawingFlag)
+    self.Box.Filled = false
+    self.Box.Visible = false
+
+    self.NameText = DrawingNew("Text", DrawingFlag)
+    self.NameText.Visible = false
+    self.NameText.Font = 2
+    self.NameText.Size = 13
+    self.NameText.Center = true
+    self.NameText.Outline = true
+
+    self.HealthOutline = DrawingNew("Line", DrawingFlag)
+    self.HealthOutline.Visible = false
+
+    self.HealthBar = DrawingNew("Line", DrawingFlag)
+    self.HealthBar.Visible = false
+
+    return self
+end
+
+function PlayerObject:GetHealth(Character)
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    if not Humanoid then return 100, 100 end
+    return Humanoid.Health, Humanoid.MaxHealth
+end
+
+function PlayerObject:GetCharacter()
+    local Player = self.Player
+    local Character = Player.Character
+    if not Character then return end
+    return Character, Character:FindFirstChild("HumanoidRootPart")
+end
+
+function PlayerObject:Update()
+    local Character, Root = self:GetCharacter()
+    if not Root then
+        self:Hide()
+        return
+    end
+
+    local Pos, OnScreen = Camera:WorldToViewportPoint(Root.Position)
+    if not OnScreen then
+        self:Hide()
+        return
+    end
+
+    local Distance = Pos.Z
+    local Scale = (2 * Camera.ViewportSize.Y) / ((2 * Distance * Tan(Rad(Camera.FieldOfView) / 2)) * 1.5)
+    local Width, Height = Round(3 * Scale), Round(4 * Scale)
+    local Center = Vector2New(Round(Pos.X - (Width / 2)), Round(Pos.Y - (Height / 2)))
+
+    -- Box
+    if Options.Box.Enabled then
+        self.BoxOutline.Visible = true
+        self.BoxOutline.Color = Options.Box.OutlineColor
+        self.BoxOutline.Thickness = Options.Box.OutlineThickness
+        self.BoxOutline.Size = Vector2New(Width, Height)
+        self.BoxOutline.Position = Center
+
+        self.Box.Visible = true
+        self.Box.Color = Options.Box.Color
+        self.Box.Thickness = Options.Box.Thickness
+        self.Box.Size = Vector2New(Width, Height)
+        self.Box.Position = Center
+    else
+        self.Box.Visible = false
+        self.BoxOutline.Visible = false
+    end
+
+    -- Name
+    if Options.Name.Enabled then
+        self.NameText.Visible = true
+        self.NameText.Text = self.Player.Name
+        self.NameText.Color = Options.Name.Color
+        self.NameText.OutlineColor = Options.Name.OutlineColor
+        self.NameText.Position = Vector2New(Center.X + (Width / 2), Center.Y - 17)
+    else
+        self.NameText.Visible = false
+    end
+
+    -- Health
+    if Options.Health.Enabled then
+        local PositionX, PositionY = Center.X - 4, Center.Y
+        local Top = Floor(PositionY + 0.5)
+        local Bottom = Floor(PositionY + Height + 0.5)
+
+        local Health, MaxHealth = self:GetHealth(Character)
+        local Fraction = Max(0, Min(1, Health / MaxHealth))
+
+        self.HealthOutline.Visible = true
+        self.HealthOutline.Color = Options.Health.OutlineColor
+        self.HealthOutline.Thickness = Options.Health.OutlineThickness
+        self.HealthOutline.From = Vector2New(PositionX, Bottom + 1)
+        self.HealthOutline.To = Vector2New(PositionX, Top - 1)
+
+        self.HealthBar.Visible = true
+        self.HealthBar.Color = Options.Health.Color
+        self.HealthBar.Thickness = Options.Health.Thickness
+        self.HealthBar.From = Vector2New(PositionX, Bottom)
+        self.HealthBar.To = Vector2New(PositionX, Bottom - Floor(Fraction * (Bottom - Top) + 0.5))
+    else
+        self.HealthBar.Visible = false
+        self.HealthOutline.Visible = false
+    end
+end
+
+function PlayerObject:Hide()
+    self.Box.Visible = false
+    self.BoxOutline.Visible = false
+    self.NameText.Visible = false
+    self.HealthBar.Visible = false
+    self.HealthOutline.Visible = false
+end
+
+-- Player Manager
+function Library:GetPlayers()
+    local List = {}
+    for _, Player in Players:GetPlayers() do
+        if Player ~= LocalPlayer then
+            if not self.PlayerCache[Player] then
+                self.PlayerCache[Player] = PlayerObject.new(Player)
+            end
+            table.insert(List, self.PlayerCache[Player])
+        end
+    end
+    return List
+end
+
+function Library:Update()
+    if not Options.Enabled then return end
+    for _, Obj in self:GetPlayers() do
+        Obj:Update()
+    end
+end
+
+function Library:Initiate()
+    table.insert(self.Connections, BetterDrawing:Init(function()
+        Library:Update()
+    end))
+end
+
+function Library:Destroy()
+    for _, Conn in self.Connections do
+        Conn:Disconnect()
+    end
+end
+
+return Library
